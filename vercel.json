@@ -2,7 +2,7 @@
   "rewrites": [
     {
       "source": "/api/process_document",
-      "destination": "http://34.133.59.172:8000/api/process_document"
+      "destination": "http://34.133.81.125:8000/api/process_document"
     }
   ]
 }
