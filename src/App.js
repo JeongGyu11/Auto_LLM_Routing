@@ -1,5 +1,6 @@
 import React, { useEffect, useState } from "react";
 
+// 2025.11.07 최종 배포를 위한 Vercel 강제 업데이트용 주석
 // MCP 서버 API 주소
 const API_URL = 'http://127.0.0.1:8000/api/process_document';
 
