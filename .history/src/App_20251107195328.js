@@ -1,6 +1,11 @@
 import React, { useEffect, useState } from "react";
 
-const API_URL = 'https://mcp-api-server-yxey.onrender.com/api/process_document';
+// 2025.11.07 최종 배포를 위한 Vercel 강제 업데이트용 주석
+// MCP 서버 API 주소 (GCP Public IP로 변경)
+const API_URL = 'http://34.133.59.172:8000/api/process_document';
+
+// MainpageStyle 파일에 대한 의존성을 제거하고 모든 스타일을 인라인으로 처리합니다.
+// 기존의 FrameWrapper, Header, MainContent 등의 컴포넌트명은 주석으로 표기했습니다.
 
 function App() {
   const [file, setFile] = useState(null);
