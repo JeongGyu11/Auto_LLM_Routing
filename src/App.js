@@ -1,7 +1,5 @@
 import React, { useEffect, useState } from "react";
-// PDF 생성을 위해 추가
 import { jsPDF } from "jspdf";
-// 한글 폰트(base64) 임포트
 import { NotoSansKRRegular } from "./fonts/notoSansKR";
 
 const API_URL = "https://mcp-api-server-yxey.onrender.com/api/process_document";
@@ -14,7 +12,6 @@ function App() {
     "MCP 서버의 분석 결과가 여기에 표시됩니다."
   );
   const [loading, setLoading] = useState(false);
-  // 분석 완료 후 PDF 다운로드 가능 여부
   const [canDownload, setCanDownload] = useState(false);
 
   const handleChange = (e) => {
@@ -36,7 +33,6 @@ function App() {
     }
 
     setLoading(true);
-    // 새 분석 시작할 때 이전 다운로드 상태 초기화
     setCanDownload(false);
     setReport(
       `'${file.name}' 파일을 [${targetTag}] 태그로 MCP 서버에 요청 전송 중...`
@@ -60,7 +56,6 @@ function App() {
           data.final_report ||
             "분석이 성공적으로 완료되었으나, 서버가 보고서 내용을 반환하지 않았습니다."
         );
-        // 성공했을 때만 PDF 버튼 활성화
         setCanDownload(true);
       } else {
         setReport(`오류 발생: ${data.detail || "MCP 서버 응답 오류"}`);
@@ -101,10 +96,9 @@ function App() {
 
     const marginLeft = 15;
     const marginTop = 20;
-    const maxLineWidth = 180; // A4 가로 210 - 좌우 15씩 여백
-
-    // 제목
+    const maxLineWidth = 180;
     const title = "MCP 분석 결과 보고서";
+
     doc.setFontSize(16);
     doc.text(title, marginLeft, marginTop);
 
@@ -122,8 +116,8 @@ function App() {
 
     // Markdown 기호 정리 (선택)
     const plainReport = report
-      .replace(/^###\s*/gm, "") // "### " 제거
-      .replace(/\*\*/g, ""); // ** 제거
+      .replace(/^###\s*/gm, "")
+      .replace(/\*\*/g, ""); 
 
     const lines = doc.splitTextToSize(plainReport, maxLineWidth);
 
