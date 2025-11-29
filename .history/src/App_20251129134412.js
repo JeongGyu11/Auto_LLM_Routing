@@ -2,7 +2,7 @@ import React, { useEffect, useState } from "react";
 import { jsPDF } from "jspdf";
 import { NotoSansKRRegular } from "./fonts/notoSansKR";
 
-const API_URL = "https://auto-llm-routing-server.onrender.com/api/process_document";
+const API_URL = "https://mcp-api-server-yxey.onrender.com/api/process_document";
 
 function App() {
   const [file, setFile] = useState(null);

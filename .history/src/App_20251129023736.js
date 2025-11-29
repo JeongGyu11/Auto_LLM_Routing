@@ -2,15 +2,11 @@ import React, { useEffect, useState } from "react";
 import { jsPDF } from "jspdf";
 import { NotoSansKRRegular } from "./fonts/notoSansKR";
 
-const API_URL = "https://auto-llm-routing-server.onrender.com/api/process_document";
-
 function App() {
   const [file, setFile] = useState(null);
   const [userRequest, setUserRequest] = useState("");
   const [targetTag, setTargetTag] = useState("분석");
-  const [report, setReport] = useState(
-    "MCP 서버의 분석 결과가 여기에 표시됩니다."
-  );
+  const [report, setReport] = useState("MCP 서버의 분석 결과가 여기에 표시됩니다.");
   const [loading, setLoading] = useState(false);
   const [canDownload, setCanDownload] = useState(false);
 
@@ -18,14 +14,12 @@ function App() {
     setFile(e.target.files?.[0] ?? null);
   };
 
+  // ==========================
+  // 🔥 MCP WebSocket 분석 요청
+  // ==========================
   const handleAnalyze = async () => {
     if (loading) return;
 
-    if (!file) {
-      setReport("파일을 먼저 선택해야 합니다.");
-      setCanDownload(false);
-      return;
-    }
     if (!userRequest.trim()) {
       setReport("요청 내용을 입력해야 합니다.");
       setCanDownload(false);
@@ -34,101 +28,94 @@ function App() {
 
     setLoading(true);
     setCanDownload(false);
-    setReport(
-      `'${file.name}' 파일을 [${targetTag}] 태그로 MCP 서버에 요청 전송 중...`
-    );
-
-    const formData = new FormData();
-    formData.append("file", file);
-    formData.append("user_request", userRequest);
-    formData.append("target_tag", targetTag);
+    setReport(`[${targetTag}] 태그로 MCP WebSocket 서버 요청 중...`);
 
     try {
-      const response = await fetch(API_URL, {
-        method: "POST",
-        body: formData,
-      });
+      const ws = new WebSocket("wss://auto-llm-routing-server.onrender.com/mcp");
 
-      const data = await response.json();
+      ws.onopen = () => {
+        console.log("WebSocket 연결됨");
 
-      if (response.ok) {
-        setReport(
-          data.final_report ||
-            "분석이 성공적으로 완료되었으나, 서버가 보고서 내용을 반환하지 않았습니다."
+        ws.send(
+          JSON.stringify({
+            jsonrpc: "2.0",
+            id: 1,
+            method: "tools/invoke",
+            params: {
+              name: "generate_text",
+              arguments: {
+                input: userRequest,
+                tag: targetTag 
+              },
+            },
+          })
         );
-        setCanDownload(true);
-      } else {
-        setReport(`오류 발생: ${data.detail || "MCP 서버 응답 오류"}`);
-        setCanDownload(false);
-        console.error("MCP 서버 오류 상세:", data);
-      }
+      };
+
+      ws.onerror = (err) => {
+        console.error("WebSocket 오류:", err);
+        setReport("WebSocket 연결 오류 발생. MCP 서버를 확인하세요.");
+        setLoading(false);
+      };
+
+      ws.onmessage = (event) => {
+        const data = JSON.parse(event.data);
+        console.log("서버 응답:", data);
+
+        if (data.result?.content) {
+          setReport(data.result.content);
+          setCanDownload(true);
+        } else {
+          setReport("MCP 서버 응답 오류 또는 빈 응답");
+          setCanDownload(false);
+        }
+        setLoading(false);
+        ws.close();
+      };
     } catch (error) {
-      setReport(
-        `네트워크 연결 오류: MCP 서버가 '${API_URL}' 주소에서 실행 중인지 확인하세요.`
-      );
+      setReport("네트워크 오류: MCP 서버 접속 실패");
       setCanDownload(false);
-      console.error("네트워크 오류 상세:", error);
-    } finally {
+      console.error(error);
       setLoading(false);
     }
   };
 
-  // PDF 다운로드 함수 (한글 폰트 적용)
+  // ==========================
+  // 📄 PDF 다운로드
+  // ==========================
   const handleDownloadPDF = () => {
-    if (
-      !report ||
-      report === "MCP 서버의 분석 결과가 여기에 표시됩니다."
-    )
-      return;
+    if (!report || report === "MCP 서버의 분석 결과가 여기에 표시됩니다.") return;
 
-    const doc = new jsPDF({
-      orientation: "p",
-      unit: "mm",
-      format: "a4",
-    });
-
-    // 1) VFS에 폰트 파일 등록
+    const doc = new jsPDF({ orientation: "p", unit: "mm", format: "a4" });
     doc.addFileToVFS("NotoSansKR-Regular.ttf", NotoSansKRRegular);
-    // 2) jsPDF에 폰트 이름 등록
     doc.addFont("NotoSansKR-Regular.ttf", "NotoSansKR", "normal");
-    // 3) 실제 사용할 폰트 선택
-    doc.setFont("NotoSansKR", "normal");
+    doc.setFont("NotoSansKR");
 
     const marginLeft = 15;
     const marginTop = 20;
     const maxLineWidth = 180;
-    const title = "MCP 분석 결과 보고서";
 
     doc.setFontSize(16);
-    doc.text(title, marginLeft, marginTop);
+    doc.text("MCP 분석 결과 보고서", marginLeft, marginTop);
 
     doc.setFontSize(11);
     doc.setTextColor(60, 60, 60);
 
-    // 파일명 & 태그 정보
     const metaY = marginTop + 8;
-    const fileNameText = `파일명: ${file ? file.name : "N/A"}`;
-    const tagText = `Controller 태그: ${targetTag}`;
-    doc.text(fileNameText, marginLeft, metaY);
-    doc.text(tagText, marginLeft, metaY + 6);
+    doc.text(`파일명: ${file ? file.name : "N/A"}`, marginLeft, metaY);
+    doc.text(`Controller 태그: ${targetTag}`, marginLeft, metaY + 6);
 
-    const bodyYStart = metaY + 16;
-
-    // Markdown 기호 정리 (선택)
-    const plainReport = report
-      .replace(/^###\s*/gm, "")
-      .replace(/\*\*/g, ""); 
+    const plainReport = report.replace(/^###\s*/gm, "").replace(/\*\*/g, "");
 
     const lines = doc.splitTextToSize(plainReport, maxLineWidth);
 
-    let cursorY = bodyYStart;
+    let cursorY = metaY + 20;
     const lineHeight = 6;
 
     lines.forEach((line) => {
       if (cursorY > 280) {
         doc.addPage();
-        // 새 페이지에서도 폰트/사이즈 유지
-        doc.setFont("NotoSansKR", "normal");
+        doc.setFont("NotoSansKR");
         doc.setFontSize(11);
         cursorY = marginTop;
       }
@@ -136,8 +123,7 @@ function App() {
       cursorY += lineHeight;
     });
 
-    const safeName =
-      file?.name?.replace(/[^a-zA-Z0-9ㄱ-ㅎ가-힣_.-]/g, "_") || "report";
+    const safeName = file?.name?.replace(/[^a-zA-Z0-9ㄱ-ㅎ가-힣_.-]/g, "_") || "report";
     doc.save(`MCP_분석결과_${safeName}.pdf`);
   };
 
@@ -145,26 +131,27 @@ function App() {
     document.title = "최강 5조 - MCP 멀티모달 분석";
   }, []);
 
+  // ==========================
+  // 🎨 스타일
+  // ==========================
   const styles = {
     FrameWrapper: {
       minHeight: "100vh",
       display: "flex",
       flexDirection: "column",
+      background: "linear-gradient(180deg, #EBFCFF 0%, #FFFFFF 100%)",
       fontFamily: "Arial, sans-serif",
-      background:
-        "linear-gradient(180deg, rgba(235, 252, 255, 1) 0%, rgba(255, 255, 255, 1) 100%)",
     },
     Header: {
       padding: "20px 40px",
-      backgroundColor: "rgba(255, 255, 255, 0.9)",
-      boxShadow: "0 2px 4px rgba(0, 0, 0, 0.05)",
+      backgroundColor: "rgba(255,255,255,0.9)",
+      boxShadow: "0 2px 4px rgba(0,0,0,0.05)",
       position: "sticky",
       top: 0,
       zIndex: 10,
     },
     LogoGroup: { display: "flex", alignItems: "center" },
-    LogoImage: { width: "30px", height: "30px", marginRight: "8px" },
-    LogoText: { fontSize: "20px", fontWeight: "bold", color: "#333" },
+    LogoText: { marginLeft: 8, fontSize: "20px", fontWeight: "bold" },
     MainContent: {
       flexGrow: 1,
       display: "flex",
@@ -186,11 +173,10 @@ function App() {
       display: "flex",
       flexDirection: "column",
       alignItems: "center",
-      justifyContent: "center",
       backgroundColor: "white",
       borderRadius: "16px",
       padding: "30px",
-      boxShadow: "0 4px 20px rgba(0, 0, 0, 0.1)",
+      boxShadow: "0 4px 20px rgba(0,0,0,0.1)",
       width: "100%",
       maxWidth: "800px",
     },
@@ -206,22 +192,6 @@ function App() {
       border: "1px solid #ddd",
       borderRadius: "8px",
       fontSize: "16px",
-      color: "#333",
-      marginRight: "12px",
-    },
-    FooterContainer: {
-      padding: "20px",
-      backgroundColor: "rgba(255, 255, 255, 0.7)",
-      borderTop: "1px solid #eee",
-      marginTop: "auto",
-    },
-    FooterTextWrapper: {
-      textAlign: "center",
-    },
-    FooterText: {
-      fontSize: "12px",
-      color: "#777",
-      margin: "4px 0",
     },
     ResultBox: {
       width: "100%",
@@ -230,8 +200,8 @@ function App() {
       padding: "20px",
       backgroundColor: "#f0faff",
       borderRadius: "16px",
-      boxShadow: "0 4px 12px rgba(0, 0, 0, 0.1)",
       border: "2px solid #009499",
+      boxShadow: "0 4px 12px rgba(0,0,0,0.1)",
     },
   };
 
@@ -239,7 +209,7 @@ function App() {
     <div style={styles.FrameWrapper}>
       <header style={styles.Header}>
         <div style={styles.LogoGroup}>
-          <img src="/logo192.png" alt="logo" style={styles.LogoImage} />
+          <img src="/logo192.png" alt="logo" width={30} height={30} />
           <span style={styles.LogoText}>최강 5조</span>
         </div>
       </header>
@@ -249,7 +219,6 @@ function App() {
 
         {/* 입력 영역 */}
         <div style={styles.SearchBox}>
-          {/* 파일 업로드 */}
           <div style={styles.SearchInnerBox}>
             <label
               htmlFor="file-input"
@@ -258,16 +227,14 @@ function App() {
                 background: "#009499",
                 color: "white",
                 borderRadius: "10px",
-                fontSize: "16px",
                 cursor: "pointer",
-                whiteSpace: "nowrap",
                 marginRight: "12px",
-                boxShadow: "0 2px 6px rgba(0, 0, 0, 0.2)",
                 fontWeight: "bold",
               }}
             >
               파일 선택
             </label>
+
             <input
               id="file-input"
               type="file"
@@ -275,36 +242,26 @@ function App() {
               onChange={handleChange}
               style={{ display: "none" }}
             />
+
             <div
               style={{
                 ...styles.SearchInput,
                 color: file ? "#111827" : "#9ca3af",
                 backgroundColor: "#f9f9f9",
-                border: "1px solid #e0e0e0",
               }}
             >
-              {file
-                ? `선택된 파일: ${file.name}`
-                : "PDF, DOCX, 이미지 파일을 선택하세요"}
+              {file ? `선택된 파일: ${file.name}` : "PDF, DOCX, 이미지 파일 선택 (선택사항)"}
             </div>
           </div>
 
-          {/* 사용자 요청 */}
+          {/* 요청 입력 */}
           <div style={{ width: "100%", marginBottom: "20px" }}>
-            <label
-              style={{
-                display: "block",
-                marginBottom: "8px",
-                fontWeight: "bold",
-                color: "#333",
-              }}
-            >
+            <label style={{ marginBottom: "8px", fontWeight: "bold", color: "#333", display: "block" }}>
               요청 내용 (Required)
             </label>
             <textarea
               value={userRequest}
               onChange={(e) => setUserRequest(e.target.value)}
-              placeholder="예: '이 문서의 핵심 내용을 요약하고 전략적 시사점을 500자 이내로 작성해줘.'"
               rows="3"
               style={{
                 width: "100%",
@@ -314,24 +271,14 @@ function App() {
                 fontSize: "15px",
                 resize: "vertical",
               }}
+              placeholder="예: '이 문서의 핵심 내용을 요약해줘.'"
             />
           </div>
 
-          {/* 태그 + 분석 버튼 */}
-          <div
-            style={{
-              width: "100%",
-              display: "flex",
-              justifyContent: "space-between",
-              alignItems: "center",
-            }}
-          >
-            <div
-              style={{ display: "flex", alignItems: "center", fontWeight: "bold" }}
-            >
-              <label style={{ marginRight: "10px", color: "#333" }}>
-                Controller 태그:
-              </label>
+          {/* 버튼 */}
+          <div style={{ width: "100%", display: "flex", justifyContent: "space-between", alignItems: "center" }}>
+            <div style={{ display: "flex", alignItems: "center", fontWeight: "bold" }}>
+              <label style={{ marginRight: "10px" }}>Controller 태그:</label>
               <select
                 value={targetTag}
                 onChange={(e) => setTargetTag(e.target.value)}
@@ -340,7 +287,6 @@ function App() {
                   borderRadius: "8px",
                   border: "1px solid #009499",
                   fontSize: "15px",
-                  backgroundColor: "white",
                   cursor: "pointer",
                 }}
               >
@@ -353,21 +299,14 @@ function App() {
               onClick={handleAnalyze}
               disabled={loading}
               style={{
-                marginLeft: "12px",
                 padding: "12px 24px",
-                background: loading
-                  ? "#9ca3af"
-                  : "linear-gradient(90deg, #00f6ff 0%, #009499 100%)",
+                background: loading ? "#9ca3af" : "linear-gradient(90deg, #00f6ff 0%, #009499 100%)",
                 color: "white",
                 border: "none",
                 borderRadius: "12px",
                 cursor: loading ? "not-allowed" : "pointer",
                 fontSize: "16px",
                 fontWeight: "bold",
-                boxShadow: "0 2px 6px rgba(0,0,0,0.2)",
-                transition: "opacity 0.3s, transform 0.1s",
-                opacity: loading ? 0.7 : 1,
-                transform: loading ? "scale(0.98)" : "scale(1)",
               }}
             >
               {loading ? "분석 중..." : "분석하기"}
@@ -375,7 +314,7 @@ function App() {
           </div>
         </div>
 
-        {/* 결과 + PDF 버튼 */}
+        {/* 결과 */}
         <div style={styles.ResultBox}>
           <h2
             style={{
@@ -387,14 +326,14 @@ function App() {
               paddingBottom: "10px",
             }}
           >
-            MCP 분석 결과 ({targetTag} 모듈 응답)
+            MCP 분석 결과 ({targetTag})
           </h2>
+
           <pre
             style={{
               whiteSpace: "pre-wrap",
               wordWrap: "break-word",
               fontSize: "14px",
-              lineHeight: "1.6",
               color: "#333",
               minHeight: "100px",
               padding: "5px",
@@ -405,7 +344,6 @@ function App() {
             {report}
           </pre>
 
-          {/* 분석이 성공적으로 끝난 경우에만 PDF 버튼 노출 */}
           {canDownload && (
             <div style={{ marginTop: "16px", textAlign: "right" }}>
               <button
@@ -414,31 +352,20 @@ function App() {
                   padding: "10px 18px",
                   background: "#009499",
                   color: "white",
-                  border: "none",
                   borderRadius: "8px",
                   fontSize: "14px",
-                  fontWeight: "bold",
                   cursor: "pointer",
-                  boxShadow: "0 2px 6px rgba(0,0,0,0.15)",
                 }}
               >
-                분석 결과 PDF로 다운로드
+                분석 결과 PDF 다운로드
               </button>
             </div>
           )}
         </div>
       </main>
 
-      <footer style={styles.FooterContainer}>
-        <div style={styles.FooterTextWrapper}>
-          <div style={styles.FooterText}>
-            2025, in 명지대학교 공개SW실무 프로젝트 5조
-          </div>
-          <div style={styles.FooterText}>
-            2025, Myongji University Open Source Software Practice Project Group
-            5
-          </div>
-        </div>
+      <footer style={{ padding: "20px", textAlign: "center", borderTop: "1px solid #eee" }}>
+        <div style={{ fontSize: "12px", color: "#777" }}>2025, 명지대학교 공개SW실무 프로젝트 5조</div>
       </footer>
     </div>
   );
